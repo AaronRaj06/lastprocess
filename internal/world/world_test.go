@@ -150,7 +150,7 @@ func TestStepDeterministic(t *testing.T) {
 		for tick := range 1000 {
 			inputs := make([]Input, len(ids))
 			for i, e := range ids {
-				inputs[i] = Input{e, Action(in.IntN(int(numActions)))}
+				inputs[i] = Input{e, Action(in.IntN(int(NumActions)))}
 			}
 			shuffled := slices.Clone(inputs)
 			in.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
@@ -173,8 +173,146 @@ func BenchmarkStep16(b *testing.B) {
 	inputs := make([]Input, len(ids))
 	for b.Loop() {
 		for i, e := range ids {
-			inputs[i] = Input{e, Action(r.IntN(int(numActions)))}
+			inputs[i] = Input{e, Action(r.IntN(int(NumActions)))}
 		}
 		s.Step(inputs)
+	}
+}
+
+func comb(s *Sim, e ecs.Entity) *Combatant { c, _ := s.combatants.Get(e); return c }
+
+func TestShootHitsShieldThenHP(t *testing.T) {
+	s := openSim()
+	a, b := s.spawnAt(2, 2), s.spawnAt(8, 2)
+	comb(s, b).Shield = 5
+	s.Step([]Input{{a, ShootE}})
+	for range 5 {
+		s.Step(nil)
+	}
+	if cb := comb(s, b); cb.HP != StartHP-15 || cb.Shield != 0 {
+		t.Fatalf("hp %d shield %d", cb.HP, cb.Shield)
+	}
+	if ca := comb(s, a); ca.Ammo != StartAmmo-1 || ca.Dealt != ProjectileDamage || s.projectiles.Len() != 0 {
+		t.Fatalf("shooter %+v, %d projectiles left", *ca, s.projectiles.Len())
+	}
+	s.Step([]Input{{a, ShootE}}) // cooldown elapsed during the idle ticks
+	s.Step([]Input{{a, ShootE}}) // still cooling down: ignored
+	if comb(s, a).Ammo != StartAmmo-2 {
+		t.Fatalf("cooldown not enforced: ammo %d", comb(s, a).Ammo)
+	}
+}
+
+func TestProjectileBlockedByWallAndNoTunnelling(t *testing.T) {
+	s := openSim()
+	s.Map.set(5, 2, Wall)
+	a, b := s.spawnAt(2, 2), s.spawnAt(8, 2)
+	s.Step([]Input{{a, ShootE}})
+	for range 5 {
+		s.Step(nil)
+	}
+	if comb(s, b).HP != StartHP || s.projectiles.Len() != 0 {
+		t.Fatal("projectile passed through a wall")
+	}
+	// Adjacent target walking into the shot must still be hit.
+	s = openSim()
+	a, b = s.spawnAt(2, 2), s.spawnAt(4, 2)
+	s.Step([]Input{{a, ShootE}, {b, MoveW}})
+	if comb(s, b).HP != StartHP-ProjectileDamage {
+		t.Fatalf("hp %d", comb(s, b).HP)
+	}
+}
+
+func TestDashStopsAtObstacleAndCoolsDown(t *testing.T) {
+	s := openSim()
+	e := s.spawnAt(2, 2)
+	s.Step([]Input{{e, DashE}})
+	if got := pos(t, s, e); got != (Position{5, 2}) {
+		t.Fatalf("dash: %v", got)
+	}
+	s.Step([]Input{{e, DashE}}) // on cooldown
+	if got := pos(t, s, e); got != (Position{5, 2}) {
+		t.Fatalf("dash ignored cooldown: %v", got)
+	}
+	s = openSim()
+	e = s.spawnAt(16, 2)
+	s.Step([]Input{{e, DashE}})
+	if got := pos(t, s, e); got != (Position{18, 2}) {
+		t.Fatalf("dash through wall: %v", got)
+	}
+}
+
+func TestPickupsApplyAndCap(t *testing.T) {
+	s := openSim()
+	e := s.spawnAt(2, 2)
+	comb(s, e).HP = 50
+	for i, k := range []PickupKind{Health, Ammo, Shield} {
+		p := s.ents.Create()
+		s.pos.Set(p, Position{3 + i, 2})
+		s.pickups.Set(p, k)
+	}
+	for range 3 {
+		s.Step([]Input{{e, MoveE}})
+	}
+	if c := comb(s, e); c.HP != 80 || c.Ammo != StartAmmo+AmmoAmount || c.Shield != ShieldAmount {
+		t.Fatalf("%+v", *c)
+	}
+}
+
+func TestZoneShrinksAndKills(t *testing.T) {
+	if z := ZoneAt(80, 40, 0); z != (Rect{0, 0, 79, 39}) {
+		t.Fatalf("initial zone %v", z)
+	}
+	if z := ZoneAt(80, 40, MaxTicks); z != (Rect{34, 17, 45, 22}) {
+		t.Fatalf("final zone %v", z)
+	}
+	s := New(Config{Seed: 3})
+	a, b := s.Spawn(), s.Spawn()
+	for !s.Done() {
+		s.Step(nil)
+	}
+	// Nobody moves, so the zone or the tick cap must end the match.
+	if s.Tick > MaxTicks || (comb(s, a).HP > 0 && comb(s, b).HP > 0 && s.Tick < MaxTicks) {
+		t.Fatalf("tick %d", s.Tick)
+	}
+	if w := s.Winner(); w != ecs.Nil && comb(s, w).HP == 0 {
+		t.Fatal("dead winner")
+	}
+}
+
+func TestWinnerIsLastAlive(t *testing.T) {
+	s := openSim()
+	a, b := s.spawnAt(2, 2), s.spawnAt(4, 2)
+	comb(s, b).HP = 20
+	if s.Done() || s.Winner() != ecs.Nil {
+		t.Fatal("done too early")
+	}
+	s.Step([]Input{{a, ShootE}})
+	if !s.Done() || s.Winner() != a || comb(s, a).Kills != 1 {
+		t.Fatalf("done %v winner %v", s.Done(), s.Winner())
+	}
+}
+
+func TestObserve(t *testing.T) {
+	s := openSim()
+	a := s.spawnAt(2, 2)
+	s.spawnAt(5, 2)
+	s.spawnAt(2, 4)
+	s.spawnAt(18, 8) // outside the 15x15 view
+	var o Observation
+	s.Observe(a, &o)
+	if !o.Alive || o.NEnemies != 2 || o.Enemies[0] != (EnemyObs{0, 2, South}) || o.Enemies[1] != (EnemyObs{3, 0, South}) {
+		t.Fatalf("%+v", o.Enemies)
+	}
+	at := func(dx, dy int) uint8 { return o.View[(dy+7)*ViewSize+dx+7] }
+	if at(3, 0) != CellEnemy || at(-2, 0) != CellWall || at(1, 0) != CellFloor || at(-7, -7) != CellWall {
+		t.Fatal("view cells wrong")
+	}
+	if o.ZoneDist != 2 || o.ShrinkIn != ShrinkEvery {
+		t.Fatalf("zone dist %d shrink %d", o.ZoneDist, o.ShrinkIn)
+	}
+	v := make([]float32, ObsLen)
+	o.Vector(v)
+	if v[225] != 1 || v[235] != 1 || v[237] != float32(2)/7 || v[243] != 0 {
+		t.Fatalf("vector %v", v[225:])
 	}
 }
