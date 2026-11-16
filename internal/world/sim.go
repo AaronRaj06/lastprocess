@@ -72,6 +72,29 @@ const (
 	NumActions
 )
 
+var actionNames = [NumActions]string{
+	"stay", "move_n", "move_e", "move_s", "move_w",
+	"shoot_n", "shoot_e", "shoot_s", "shoot_w", "dash_n", "dash_e", "dash_s", "dash_w",
+}
+
+// String is the action's name in the bot API, e.g. "shoot_e".
+func (a Action) String() string {
+	if !a.Valid() {
+		return "invalid"
+	}
+	return actionNames[a]
+}
+
+// ParseAction is the inverse of String.
+func ParseAction(s string) (Action, bool) {
+	for i, n := range actionNames {
+		if n == s {
+			return Action(i), true
+		}
+	}
+	return Stay, false
+}
+
 // Valid reports whether a is a defined action. Inputs are checked at the boundary.
 func (a Action) Valid() bool { return a < NumActions }
 

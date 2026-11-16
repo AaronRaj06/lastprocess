@@ -2,10 +2,12 @@ package match
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/AaronRaj06/lastprocess/internal/bot"
+	"github.com/AaronRaj06/lastprocess/internal/sandbox"
 )
 
 // NewController builds a bot from a spec: "random", "baseline",
@@ -17,9 +19,19 @@ func NewController(spec string, seed uint64) (bot.Controller, error) {
 		return bot.NewRandom(seed), nil
 	case "baseline":
 		return bot.NewBaseline(seed), nil
+	case "lua":
+		src, err := os.ReadFile(arg)
+		if err != nil {
+			return nil, err
+		}
+		return sandbox.New(string(src), seed)
 	}
-	_ = arg
 	return nil, fmt.Errorf("unknown bot %q", spec)
+}
+
+func kindOf(spec string) string {
+	kind, _, _ := strings.Cut(spec, ":")
+	return kind
 }
 
 // ParseLineup expands "baseline,random*7" into one spec per slot.
@@ -55,7 +67,7 @@ func NewGameFromLineup(seed uint64, lineup []string) (*Game, error) {
 		if err != nil {
 			return nil, err
 		}
-		kind, _, _ := strings.Cut(spec, ":")
+		kind := kindOf(spec)
 		slots[i] = Slot{Name: fmt.Sprintf("%s-%d", kind, i), Kind: kind, Ctl: ctl}
 	}
 	return NewGame(seed, slots), nil
