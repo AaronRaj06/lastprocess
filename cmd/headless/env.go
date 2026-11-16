@@ -20,6 +20,7 @@ import (
 //	server -> client on connect:  u32 obsLen, u32 numActions
 //	client -> server 'R': u64 seed, u32 n      reply: n*obsLen f32
 //	client -> server 'S': n action bytes       reply: n*obsLen f32, n f32 rewards, n u8 done, n u8 won
+//	client -> server 'X': (nothing)            reply: n action bytes, what the baseline would do now
 //
 // The learner is always slot 0; the opponents are the rest of the lineup.
 // A finished environment resets itself; the observation returned with done=1
@@ -38,6 +39,7 @@ type env struct {
 	seed     uint64
 	last     world.Combatant
 	opponent []string
+	expert   *bot.Baseline // labels states for imitation warm start ('X')
 }
 
 func (e *env) reset() {
@@ -49,6 +51,7 @@ func (e *env) reset() {
 	}
 	g.Slots[0].Ctl = bot.Func(func(*world.Observation) world.Action { return e.action })
 	e.game = g
+	e.expert = bot.NewBaseline(e.seed)
 	e.last, _ = g.Sim.Stats(g.IDs[0])
 }
 
@@ -157,6 +160,22 @@ func serveConn(conn net.Conn, opponents []string) error {
 				}
 			}
 			out = tail
+		case 'X':
+			if envs == nil {
+				return fmt.Errorf("expert before reset")
+			}
+			var o world.Observation
+			for i, e := range envs {
+				e.game.Sim.Observe(e.game.IDs[0], &o)
+				actions[i] = byte(e.expert.Act(&o))
+			}
+			if _, err := w.Write(actions); err != nil {
+				return err
+			}
+			if err := w.Flush(); err != nil {
+				return err
+			}
+			continue
 		default:
 			return fmt.Errorf("unknown op %q", op)
 		}

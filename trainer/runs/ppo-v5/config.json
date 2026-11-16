@@ -1,0 +1,20 @@
+{
+  "seed": 1,
+  "steps": 8000000,
+  "n_envs": 64,
+  "opponents": "baseline",
+  "n_steps": 256,
+  "batch_size": 2048,
+  "n_epochs": 4,
+  "gamma": 0.995,
+  "gae_lambda": 0.95,
+  "learning_rate": 0.0001,
+  "ent_coef": 0.002,
+  "net_arch": [
+    256,
+    256
+  ],
+  "bc_samples": 300000,
+  "bc_rounds": 3,
+  "freeze_steps": 500000
+}

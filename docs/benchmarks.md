@@ -21,8 +21,8 @@ Every number here was produced by a command in this repo on 2026-11-16. Rerun th
 | Headless throughput, 8 baseline bots | 799 matches/s, 0.75 M ticks/s (4,690x real time per core) | `go run ./cmd/headless -matches 5000 -bots 'baseline*8'` |
 | Baseline vs random, duel | baseline wins **80.3%** (n = 5,000) | `go run ./cmd/headless -matches 5000 -bots baseline,random` |
 | Baseline vs 7 random bots | baseline wins **43.9%** (chance 12.5%, n = 5,000) | `go run ./cmd/headless -matches 5000 -bots 'baseline,random*7'` |
-| RL bot vs baseline, duel | RL wins **48.5%**, baseline 50.5%, no survivor 1.1% (n = 2,000). **The RL bot does not beat the baseline.** | `make eval` |
-| RL bot vs 7 baselines | RL wins 13.4% (chance 12.5%, n = 2,000) | `go run ./cmd/headless -matches 2000 -seed 200000 -bots 'rl,baseline*7'` |
+| RL bot vs baseline, duel | RL wins **56.0%**, baseline 42.4%, no survivor 1.6% (n = 2,000) | `make eval` |
+| RL bot vs 7 baselines | RL wins 16.9% (chance 12.5%, n = 2,000) | `go run ./cmd/headless -matches 2000 -seed 200000 -bots 'rl,baseline*7'` |
 | Determinism | **50 full matches** run twice with the hash compared after every tick, then replayed from the log bit-identically; plus 20 seeds x 1,000 ticks with shuffled input order. In CI under `-race`. | `go test -race -run 'Deterministic' ./internal/match ./internal/world` |
 | Sandbox attack suite | **28 attack cases, all contained**; 27 blocked globals unreachable | `go test -v -run 'Attacks\|Blocked' ./internal/sandbox` |
 | Go ONNX runner vs PyTorch | max logit difference 4.8e-06 over 16 vectors | `go test -v -run PolicyMatches ./internal/bot` |
@@ -71,13 +71,22 @@ Training: PPO (Stable-Baselines3), 64 parallel duels against the baseline, MLP 2
 | ppo-v1 | raw observation vector | 8 M | 44.5% |
 | ppo-v2 | longer, learning rate decay | 30 M | 47.4% |
 | ppo-v3 | ray-cast features (D15) | 16 M | 47.9% |
-| ppo-v4 (shipped) | incoming-projectile field | 16 M | **48.5%** (baseline 50.5%) |
+| ppo-v4 | incoming-projectile field | 16 M | 48.5% (baseline 50.5%) |
+| ppo-v5 (shipped) | imitation warm start on the baseline (3 DAgger rounds of 300k labelled states), 0.5 M steps with the actor frozen, then PPO at a lower learning rate | 8.4 M | **56.0%** (baseline 42.4%) |
 
-The acceptance criterion "beats the scripted baseline" is **not met**. The policy reaches parity and stays there. With n = 2,000 the standard error is about 1.1 points, so 48.5% is not distinguishable from an even match, and it is not a win.
+The acceptance criterion "beats the scripted baseline" is met by ppo-v5 and by none of the four from-scratch runs. With n = 2,000 the standard error is about 1.1 points, so a 13.6-point gap is well outside noise. Checks on the shipped policy:
 
-Our reading (a hypothesis, not tested): the baseline's rule "line up, then shoot every 5 ticks" is close to the best simple strategy, and PPO converges to mirroring it. Beating it needs dodging on sight of an incoming shot, which pays off only several ticks later. A mirror duel between two baselines has no slot-order bias (44.3% vs 43.4% over 20,000 matches, `-per-slot`), so the environment itself is fair.
+| Check | Result | Command |
+|---|---|---|
+| Second seed set | RL 55.8%, baseline 42.3% (n = 2,000) | `go run ./cmd/headless -matches 2000 -seed 500000 -bots rl,baseline` |
+| RL in the second slot | RL 53.8%, baseline 44.5% (n = 2,000) | `go run ./cmd/headless -matches 2000 -seed 100000 -bots baseline,rl` |
+| vs random | RL 80.3%, random 19.3% (n = 1,000) | `go run ./cmd/headless -matches 1000 -seed 100000 -bots rl,random` |
 
-What would be tried next: self-play or a league instead of a fixed opponent, a recurrent policy, or a short imitation phase on the baseline before PPO.
+The cloned policy alone (before any PPO) scored 43.5% against the baseline's 44.9%, with only about 61% action agreement, so the gain over parity comes from the fine-tuning. The training-time win rate peaked near 58% at 4 M steps and ended at 54%; only the final checkpoint was exported and evaluated. This is a single training seed.
+
+Our reading (a hypothesis, not tested): from scratch, PPO converges to a noisy mirror of the baseline's "line up, then shoot every 5 ticks" and stays there; starting from a clone of that rule lets it spend its training on the small improvements instead. We have not analysed what the policy does differently. A mirror duel between two baselines has no slot-order bias (44.3% vs 43.4% over 20,000 matches, `-per-slot`), so the environment itself is fair.
+
+What would be tried next: self-play or a league instead of a fixed opponent, training in 8-player matches (the policy has only ever seen duels), and a recurrent policy.
 
 ## Notes on the Phase 1 numbers
 

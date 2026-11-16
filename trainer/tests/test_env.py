@@ -63,3 +63,15 @@ def test_onnx_matches_exported_vectors():
     sess = ort.InferenceSession(str(onnx_path))
     got = sess.run(None, {"obs": np.array(data["obs"], dtype=np.float32)})[0]
     np.testing.assert_allclose(got, np.array(data["logits"]), atol=1e-4)
+
+
+def test_expert_labels_are_valid_and_repeatable():
+    from lps_env import SimClient
+    c = SimClient()
+    try:
+        c.reset(7, 4)
+        a = c.expert()
+        c.reset(7, 4)
+        assert a.shape == (4,) and (a < c.num_actions).all() and (a == c.expert()).all()
+    finally:
+        c.close()

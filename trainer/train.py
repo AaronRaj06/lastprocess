@@ -34,6 +34,9 @@ CONFIG = dict(
     learning_rate=3e-4,  # decays linearly to zero
     ent_coef=0.005,
     net_arch=[256, 256],
+    bc_samples=0,     # >0: imitation warm start, this many baseline-labelled states per DAgger round
+    bc_rounds=3,
+    freeze_steps=0,   # PPO steps with the actor frozen, so the fresh critic cannot wreck the cloned policy
 )
 
 
@@ -62,6 +65,40 @@ class Actor(torch.nn.Module):
 
     def forward(self, obs):
         return self.net(obs)
+
+
+def clone_baseline(model: PPO, env: LPSVecEnv, samples: int, rounds: int) -> None:
+    """DAgger: label visited states with the baseline's action and fit the actor to them.
+
+    Round 0 follows the baseline, later rounds follow the learner, always with
+    10% random actions so the data covers states the baseline never reaches.
+    """
+    actor = Actor(model.policy)
+    opt = torch.optim.Adam(actor.parameters(), lr=1e-3)
+    rng = np.random.default_rng(model.seed)
+    xs, ys = [], []
+    obs = env.reset()
+    for rnd in range(rounds):
+        for _ in range(samples // env.num_envs):
+            label = env.client.expert()
+            xs.append(obs)
+            ys.append(label)
+            act = label
+            if rnd > 0:
+                with torch.no_grad():
+                    act = actor(torch.from_numpy(obs)).argmax(1).numpy()
+            act = np.where(rng.random(env.num_envs) < 0.1, rng.integers(0, env.action_space.n, env.num_envs), act)
+            obs = env.client.step(act)[0]
+        x, y = torch.from_numpy(np.concatenate(xs)), torch.from_numpy(np.concatenate(ys))
+        for _ in range(8):
+            for idx in torch.randperm(len(x)).split(4096):
+                loss = torch.nn.functional.cross_entropy(actor(x[idx]), y[idx])
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+        with torch.no_grad():
+            acc = (actor(x[-samples:]).argmax(1) == y[-samples:]).float().mean().item()
+        print(f"bc round {rnd}: {len(x)} samples, loss {loss.item():.3f}, agreement on newest data {acc:.3f}")
 
 
 def export_onnx(model: PPO, path: Path) -> None:
@@ -104,7 +141,17 @@ def main() -> None:
         ent_coef=cfg["ent_coef"], policy_kwargs=dict(net_arch=cfg["net_arch"]),
     )
     model.set_logger(configure(str(run), ["stdout", "csv"]))
-    model.learn(total_timesteps=cfg["steps"], callback=WinRate(), log_interval=10)
+    if cfg["bc_samples"]:
+        clone_baseline(model, env, cfg["bc_samples"], cfg["bc_rounds"])
+    if cfg["freeze_steps"]:
+        actor = list(Actor(model.policy).parameters())
+        for p in actor:
+            p.requires_grad_(False)
+        model.learn(total_timesteps=cfg["freeze_steps"], callback=WinRate(), log_interval=10)
+        for p in actor:
+            p.requires_grad_(True)
+    if cfg["steps"]:
+        model.learn(total_timesteps=cfg["steps"], callback=WinRate(), log_interval=10, reset_num_timesteps=False)
     model.save(run / "model")
     export_onnx(model, Path(args.out))
     env.close()

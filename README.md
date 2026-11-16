@@ -64,7 +64,7 @@ Apple M1, server and load generator on the same machine. Full table with command
 | Determinism | 50 full matches hashed every tick and replayed bit-identically, in CI |
 | Sandbox | 28 attack scripts contained, 27 dangerous globals unreachable |
 | Scripted baseline vs random bot | wins 80.3% of 5,000 duels |
-| RL bot vs scripted baseline | 48.5% of 2,000 duels: parity, **not a win** |
+| RL bot vs scripted baseline | wins 56.0% of 2,000 duels (baseline 42.4%, rest no survivor) |
 | Test coverage | ecs 97%, world 91%, sandbox 96%, render 98%, replay 94% |
 
 ## Design decisions
@@ -88,7 +88,7 @@ Its limits and known weaknesses:
 - Bots run in the server process. A bug in the VM that overflows the Go stack or exhausts memory cannot be caught in-process; the container memory limit is the last defence. There is no per-bot OS isolation.
 - A disqualified bot stands still until the zone kills it; it is not removed from the match.
 
-**What did not work.** The RL bot does not beat the scripted baseline. Four training runs ended between 44.5% and 48.5% of evaluation duels. The pipeline (Gym environment, PPO, ONNX export, a Go inference path checked against PyTorch) works end to end; the policy is at parity, and the benchmarks file says what would be tried next.
+**What did not work.** PPO from scratch never beat the scripted baseline: four training runs ended between 44.5% and 48.5% of evaluation duels. The fifth run first clones the baseline (imitation warm start) and then fine-tunes with PPO; it wins 56.0% of 2,000 held-out duels against the baseline's 42.4%. The margin is modest, and in an 8-player match against seven baselines it wins 16.9% (chance is 12.5%). Details are in the benchmarks file.
 
 ## Repository layout
 

@@ -27,7 +27,7 @@ headless:
 
 # RL: train against the baseline, then evaluate the exported policy on seeds never used in training.
 train:
-	cd trainer && uv run python train.py
+	cd trainer && uv run python train.py --name ppo-v5 --bc_samples 300000 --freeze_steps 500000 --steps 8000000 --learning_rate 1e-4 --ent_coef 0.002
 
 eval:
 	go run ./cmd/headless -matches 2000 -seed 100000 -bots rl,baseline

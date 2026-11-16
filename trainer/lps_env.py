@@ -71,6 +71,11 @@ class SimClient:
         wins = np.frombuffer(tail[5 * self.n:], dtype=np.uint8).astype(bool)
         return obs, rewards, dones, wins
 
+    def expert(self) -> np.ndarray:
+        """The scripted baseline's action for each env's current observation."""
+        self.sock.sendall(b"X")
+        return np.frombuffer(self._read(self.n), dtype=np.uint8).astype(np.int64)
+
     def close(self):
         try:
             self.sock.close()
