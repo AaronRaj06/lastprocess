@@ -1,0 +1,16 @@
+# Build: docker build -f deploy/Dockerfile -t lastprocess .
+FROM golang:1.27 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+# No cgo anywhere (pure-Go SQLite, Lua VM and ONNX runner), so the binary is static.
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /server ./cmd/server
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /server /server
+# /data holds the SQLite database and the SSH host key; mount a volume here so
+# both survive redeploys (a changed host key makes every client see a warning).
+VOLUME /data
+EXPOSE 2222
+ENTRYPOINT ["/server", "-addr", ":2222", "-data", "/data", "-fill", "rl,baseline"]

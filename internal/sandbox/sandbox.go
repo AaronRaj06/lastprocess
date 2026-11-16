@@ -189,6 +189,11 @@ func obsTable(o *world.Observation) rt.Value {
 	set("zone_dist", o.ZoneDist)
 	set("shrink_in", o.ShrinkIn)
 	t.Set(rt.StringValue("facing"), rt.StringValue(facingNames[o.Facing]))
+	threats := rt.NewTableWithCapacity(0, 4)
+	for d, dist := range o.Threats {
+		threats.Set(rt.StringValue(facingNames[d]), rt.IntValue(int64(dist)))
+	}
+	t.Set(rt.StringValue("threats"), rt.TableValue(threats))
 	view := rt.NewTableWithCapacity(len(o.View), 0)
 	for i, c := range o.View {
 		view.Set(rt.IntValue(int64(i+1)), rt.IntValue(int64(c)))

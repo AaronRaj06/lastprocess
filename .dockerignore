@@ -1,0 +1,6 @@
+.git
+bin
+data
+trainer
+docs
+*.db

@@ -1,0 +1,17 @@
+# Runs on the Oracle Cloud Always Free VM. Port 22 on the host goes to the game;
+# move the VM's own sshd to another port first (see deploy/README.md).
+services:
+  game:
+    image: ghcr.io/aaronraj06/lastprocess:latest
+    restart: unless-stopped
+    ports:
+      - "22:2222"
+    volumes:
+      - lastprocess-data:/data
+    mem_limit: 512m
+    pids_limit: 256
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  lastprocess-data:

@@ -5,13 +5,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/AaronRaj06/lastprocess/internal/bot"
 	"github.com/AaronRaj06/lastprocess/internal/sandbox"
 )
 
-// NewController builds a bot from a spec: "random", "baseline",
-// "rl:<policy.onnx>" or "lua:<script.lua>". seed drives the bot's own RNG.
+// NewController builds a bot from a spec: "random", "baseline", "rl" (the
+// embedded policy), "rl:<policy.onnx>" or "lua:<script.lua>". seed drives the bot's own RNG.
 func NewController(spec string, seed uint64) (bot.Controller, error) {
 	kind, arg, _ := strings.Cut(spec, ":")
 	switch kind {
@@ -19,6 +20,12 @@ func NewController(spec string, seed uint64) (bot.Controller, error) {
 		return bot.NewRandom(seed), nil
 	case "baseline":
 		return bot.NewBaseline(seed), nil
+	case "rl":
+		p, err := policy(arg)
+		if err != nil {
+			return nil, err
+		}
+		return p.Controller(), nil
 	case "lua":
 		src, err := os.ReadFile(arg)
 		if err != nil {
@@ -27,6 +34,27 @@ func NewController(spec string, seed uint64) (bot.Controller, error) {
 		return sandbox.New(string(src), seed)
 	}
 	return nil, fmt.Errorf("unknown bot %q", spec)
+}
+
+var policies sync.Map // path -> *bot.Policy; weights are immutable, so one copy serves every match
+
+// policy returns the embedded policy for "" or a cached policy loaded from path.
+func policy(path string) (*bot.Policy, error) {
+	if p, ok := policies.Load(path); ok {
+		return p.(*bot.Policy), nil
+	}
+	var p *bot.Policy
+	var err error
+	if path == "" {
+		p, err = bot.EmbeddedPolicy()
+	} else {
+		p, err = bot.LoadPolicy(path)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("rl policy: %w", err)
+	}
+	policies.Store(path, p)
+	return p, nil
 }
 
 func kindOf(spec string) string {

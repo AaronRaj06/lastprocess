@@ -11,7 +11,18 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go vet ./...
+      # Includes the determinism gate (TestMatchesDeterministicAndReplay: 50 seeds,
+      # hash compared every tick, replay verified) and the sandbox attack suite.
       - run: go test -race -cover ./...
       - uses: golangci/golangci-lint-action@v8
         with:
           version: v2.15.0
+  trainer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v5
+      - run: cd trainer && uv run pytest -q

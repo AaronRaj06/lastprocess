@@ -8,7 +8,7 @@ const (
 	viewR      = ViewSize / 2
 	MaxEnemies = 3
 	// ObsLen is the length of the flat vector used by RL policies.
-	ObsLen = ViewSize*ViewSize + 10 + MaxEnemies*4
+	ObsLen = ViewSize*ViewSize + 10 + MaxEnemies*4 + 4*3
 )
 
 // Cell codes in Observation.View.
@@ -40,6 +40,7 @@ type Observation struct {
 	ShrinkIn         int                  // ticks until the zone shrinks; 0 once it has stopped
 	Enemies          [MaxEnemies]EnemyObs // nearest first (Manhattan), only those inside the view
 	NEnemies         int
+	Threats          [4]int // per direction N,E,S,W: distance to the nearest enemy projectile flying at you on that line; 0 = none
 	Alive            bool
 }
 
@@ -77,9 +78,25 @@ func (s *Sim) Observe(e ecs.Entity, o *Observation) {
 		p, _ := s.pos.Get(pe)
 		mark(p, CellHealth+uint8(*k))
 	})
-	s.projectiles.Each(func(pe ecs.Entity, _ *Projectile) {
+	s.projectiles.Each(func(pe ecs.Entity, pr *Projectile) {
 		p, _ := s.pos.Get(pe)
-		mark(p, CellProjectile)
+		dx, dy, ok := mark(p, CellProjectile)
+		if !ok || pr.Owner == e || (dx != 0 && dy != 0) || (dx == 0 && dy == 0) {
+			return
+		}
+		// from is the side the projectile is on; it threatens us if it flies the opposite way.
+		from := North
+		switch {
+		case dx > 0:
+			from = East
+		case dx < 0:
+			from = West
+		case dy > 0:
+			from = South
+		}
+		if d := abs(dx) + abs(dy); pr.Dir == (from+2)%4 && (o.Threats[from] == 0 || d < o.Threats[from]) {
+			o.Threats[from] = d
+		}
 	})
 	s.combatants.Each(func(oe ecs.Entity, oc *Combatant) {
 		if oe == e || oc.HP <= 0 {
@@ -113,7 +130,11 @@ func abs(x int) int {
 }
 
 // Vector writes the observation as ObsLen floats, roughly in [-1, 1], for RL policies.
-// Layout: 225 view cells, 10 self features, then 3 x (present, dx, dy, facing).
+// Layout: 225 view cells, 10 self features, 3 x (present, dx, dy, facing), then
+// for each direction N, E, S, W a ray cast through the view: (free cells before
+// the first wall, closeness of the first enemy in the line of fire, closeness
+// of an incoming enemy projectile, from Threats). The rays add no information; they
+// restate the view in the form shooting and dodging decisions need.
 func (o *Observation) Vector(dst []float32) {
 	_ = dst[ObsLen-1]
 	for i, c := range o.View {
@@ -131,5 +152,24 @@ func (o *Observation) Vector(dst []float32) {
 			e = [4]float32{1, float32(o.Enemies[i].DX) / viewR, float32(o.Enemies[i].DY) / viewR, float32(o.Enemies[i].Facing) / 3}
 		}
 		n += copy(dst[n:], e[:])
+	}
+	for d := range Dir(4) {
+		dx, dy := d.Delta()
+		free, enemy, shot := float32(viewR), float32(0), float32(0)
+		for k := 1; k <= viewR; k++ {
+			c := o.View[(dy*k+viewR)*ViewSize+dx*k+viewR]
+			if c == CellWall {
+				free = float32(k - 1)
+				break
+			}
+			near := float32(viewR+1-k) / viewR
+			if c == CellEnemy && enemy == 0 {
+				enemy = near
+			}
+		}
+		if t := o.Threats[d]; t > 0 && float32(t-1) <= free {
+			shot = float32(viewR+1-t) / viewR
+		}
+		n += copy(dst[n:], []float32{free / viewR, enemy, shot})
 	}
 }

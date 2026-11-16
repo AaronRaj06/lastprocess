@@ -250,6 +250,14 @@ func (s *Sim) rebuildOcc() {
 	})
 }
 
+// Stats returns a copy of combatant e's state; ok is false for unknown entities.
+func (s *Sim) Stats(e ecs.Entity) (c Combatant, ok bool) {
+	if p, ok := s.combatants.Get(e); ok {
+		return *p, true
+	}
+	return c, false
+}
+
 // Zone is the current safe zone.
 func (s *Sim) Zone() Rect { return ZoneAt(s.Map.W, s.Map.H, s.Tick) }
 

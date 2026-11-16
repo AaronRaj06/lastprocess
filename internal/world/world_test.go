@@ -316,3 +316,34 @@ func TestObserve(t *testing.T) {
 		t.Fatalf("vector %v", v[225:])
 	}
 }
+
+func TestVectorRays(t *testing.T) {
+	s := openSim()
+	a := s.spawnAt(2, 2)
+	s.spawnAt(5, 2)
+	var o Observation
+	s.Observe(a, &o)
+	v := make([]float32, ObsLen)
+	o.Vector(v)
+	rays := v[ObsLen-12:]
+	// North: wall after 1 free cell. East: enemy 3 cells away in the line of fire.
+	if rays[0] != float32(1)/7 || rays[1] != 0 || rays[4] != float32(5)/7 || rays[9] != float32(1)/7 {
+		t.Fatalf("rays %v", rays)
+	}
+}
+
+func TestThreats(t *testing.T) {
+	s := openSim()
+	a, b := s.spawnAt(2, 2), s.spawnAt(10, 2)
+	s.Step([]Input{{b, ShootW}, {a, ShootE}}) // both shots are now 2 cells out
+	var o Observation
+	s.Observe(a, &o)
+	if o.Threats != [4]int{East: 6} { // b's shot at x=8; a's own shot at x=4 is not a threat
+		t.Fatalf("threats %v", o.Threats)
+	}
+	v := make([]float32, ObsLen)
+	o.Vector(v)
+	if got := v[ObsLen-12+int(East)*3+2]; got != float32(2)/7 {
+		t.Fatalf("threat feature %v", got)
+	}
+}

@@ -7,3 +7,9 @@
 *.pem
 .ssh/
 coverage.out
+/data/
+.venv/
+__pycache__/
+.pytest_cache/
+trainer/runs/*/model.zip
+trainer/runs/smoke/

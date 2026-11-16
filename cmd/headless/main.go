@@ -20,6 +20,7 @@ func main() {
 	matches := flag.Int("matches", 1000, "number of matches")
 	seed := flag.Uint64("seed", 1, "first match seed; match i uses seed+i")
 	workers := flag.Int("workers", runtime.NumCPU(), "parallel matches")
+	perSlot := flag.Bool("per-slot", false, "report wins per slot instead of per bot kind (shows slot-order bias)")
 	serve := flag.String("serve", "", "serve the RL environment on this TCP address instead of running matches")
 	flag.Parse()
 
@@ -29,11 +30,8 @@ func main() {
 		os.Exit(2)
 	}
 	if *serve != "" {
-		if err := serveEnv(*serve, lineup[1:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
+		fmt.Fprintln(os.Stderr, serveEnv(*serve, lineup[1:])) // only returns on a listener error
+		os.Exit(1)
 	}
 
 	wins := make([]atomic.Int64, len(lineup))
@@ -71,7 +69,7 @@ func main() {
 	// Wins are reported per slot group so "rl,baseline*7" shows the RL bot against the field.
 	for i := 0; i < len(lineup); {
 		j, w := i, int64(0)
-		for ; j < len(lineup) && lineup[j] == lineup[i]; j++ {
+		for ; j < len(lineup) && lineup[j] == lineup[i] && (j == i || !*perSlot); j++ {
 			w += wins[j].Load()
 		}
 		fmt.Printf("  %-28s x%-2d wins %6d  (%.1f%%)\n", lineup[i], j-i, w, 100*float64(w)/float64(*matches))
