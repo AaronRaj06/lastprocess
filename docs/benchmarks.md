@@ -1,32 +1,84 @@
 # Benchmarks
 
-Every number below comes from a command in this repo. The value shown is the median of 5 runs (`-count 5`).
+Every number here was produced by a command in this repo on 2026-11-16. Rerun the command to reproduce it.
 
-**Hardware:** Apple M1, 8 cores, macOS (Darwin 27), Go 1.27.4.
+**Hardware:** Apple M1 (8 cores), macOS (Darwin 27), Go 1.27.4. Server and load generator ran on the same machine, so the load numbers are conservative for the server and say nothing about a real network.
 
-## ECS and sim (Phase 1)
+## Summary table
 
-Command:
+| Metric | Value | Command |
+|---|---|---|
+| Max concurrent load at a stable 20 Hz | **1,600 SSH sessions in 201 matches**, 0 failed sessions, tick lateness p99 0.04 ms | `make loadtest` |
+| Input-to-frame latency, 100 to 800 sessions | **p50 26 ms, p99 50 ms** | `make loadtest` |
+| Input-to-frame latency, 1,600 sessions | p50 26 ms, p99 71 ms | `make loadtest` |
+| Bytes per frame, full redraw vs diff | 5,631 B vs **84 B (98.5% less)** | `go test -run '^$' -bench FrameBytes ./internal/render` |
+| Bytes per frame measured live over SSH | 57 to 63 B per frame, 1.2 kB/s per session | `make loadtest` |
+| Tick cost per combatant: native baseline | **8.8 ns** | `go test -run '^$' -bench Act ./internal/bot` |
+| Tick cost per combatant: Lua bot in the sandbox | **13.7 µs** (about 1,600x native) | `go test -run '^$' -bench LuaAct ./internal/sandbox` |
+| Tick cost per combatant: RL policy (259-256-256-13 MLP) | **94 µs** | `go test -run '^$' -bench PolicyAct ./internal/bot` |
+| ECS movement system | **209 to 218 M entities/s**, 0 allocations | `go test -run '^$' -bench Movement ./internal/ecs` |
+| Sim step, 16 combatants | 508 ns per tick | `go test -run '^$' -bench Step16 ./internal/world` |
+| Headless throughput, 8 baseline bots | 799 matches/s, 0.75 M ticks/s (4,690x real time per core) | `go run ./cmd/headless -matches 5000 -bots 'baseline*8'` |
+| Baseline vs random, duel | baseline wins **80.3%** (n = 5,000) | `go run ./cmd/headless -matches 5000 -bots baseline,random` |
+| Baseline vs 7 random bots | baseline wins **43.9%** (chance 12.5%, n = 5,000) | `go run ./cmd/headless -matches 5000 -bots 'baseline,random*7'` |
+| RL bot vs baseline, duel | RL wins **48.5%**, baseline 50.5%, no survivor 1.1% (n = 2,000). **The RL bot does not beat the baseline.** | `make eval` |
+| RL bot vs 7 baselines | RL wins 13.4% (chance 12.5%, n = 2,000) | `go run ./cmd/headless -matches 2000 -seed 200000 -bots 'rl,baseline*7'` |
+| Determinism | **50 full matches** run twice with the hash compared after every tick, then replayed from the log bit-identically; plus 20 seeds x 1,000 ticks with shuffled input order. In CI under `-race`. | `go test -race -run 'Deterministic' ./internal/match ./internal/world` |
+| Sandbox attack suite | **28 attack cases, all contained**; 27 blocked globals unreachable | `go test -v -run 'Attacks\|Blocked' ./internal/sandbox` |
+| Go ONNX runner vs PyTorch | max logit difference 4.8e-06 over 16 vectors | `go test -v -run PolicyMatches ./internal/bot` |
+| Test coverage | ecs 97.3%, world 91.2%, sandbox 95.9%, render 98.5%, replay 94.4%, session 90.7%, match 89.7%, store 83.1%, bot 72.1% | `make cover` |
+| Docker image | 24.4 MB, static binary, non-root, read-only root filesystem | `make docker` |
 
-```
-go test -run '^$' -bench . -benchmem -count 5 ./internal/...
-```
+## Load test detail
 
-| Benchmark | What it measures | Median | Allocs |
+`cmd/loadtest` opens real SSH sessions (PTY, 80x43), and each one sends about five keys per second. Sixteen probe sessions run a terminal emulator and time each key from the moment it is sent until a frame arrives whose HUD shows the server applied it. The server reports how late each tick fired against the 50 ms schedule. "Stable" means tick lateness p99 under 5 ms and fewer than 1% of ticks more than 5 ms late. Each step measured 20 seconds after an 8 second warm-up. Eight humans per match, no bots.
+
+| Sessions | Matches | Failed sessions | Tick late p99 / max | Ticks > 5 ms late | Tick work p99 | Input-to-frame p50 / p99 | Stable |
+|---|---|---|---|---|---|---|---|
+| 100 | 13 | 0 | 0.04 / 4.8 ms | 0 of 5,200 | 0.08 ms | 25.6 / 50.0 ms | yes |
+| 400 | 51 | 0 | 0.03 / 0.1 ms | 0 of 20,402 | 0.05 ms | 25.7 / 50.0 ms | yes |
+| 800 | 101 | 0 | 0.04 / 25.4 ms | 2 of 40,408 | 0.05 ms | 25.8 / 50.1 ms | yes |
+| 1,600 | 201 | 0 | 0.04 / 5.7 ms | 67 of 80,402 | 0.17 ms | 25.9 / 70.5 ms | yes |
+| 2,400 | 298 | 25 | 0.15 / 51.7 ms | 267 of 119,008 | 0.35 ms | 27.9 / 170.0 ms | degraded |
+| 3,200 | 382 | 159 | 37.8 / 200 ms | 1,715 of 154,815 | 0.66 ms | 39.0 / 344.5 ms | no |
+
+How to read it:
+- A key waits for the next tick, so latency is spread evenly over 0 to 50 ms. A p50 of 26 ms and a p99 of 50 ms mean the server adds almost nothing on top of the tick.
+- The sim is not the limit: stepping a match and fanning out its snapshot takes under 0.2 ms at p99 even with 201 matches. What gives out first is SSH encryption and scheduling for thousands of connections, shared with a load generator that is doing the same work on the same 8 cores.
+- Percentiles come from the most recent 32,768 tick samples.
+- These numbers are from one run; they were not repeated to get error bars.
+
+## Frame size
+
+`BenchmarkFrameBytes` plays whole matches with 8 scripted combatants and renders each tick for one player on an 80x43 terminal. Full redraw: 5,631 bytes. Diff: 84 bytes on average, including the first full frame of each match. `TestDiffStreamReproducesFrames` feeds the diff stream into a terminal emulator and checks that every frame matches, for three terminal sizes including one small enough that the camera scrolls.
+
+## Bot cost
+
+| Bot | Per decision | Notes |
+|---|---|---|
+| Native baseline | 8.8 ns, 0 allocations | plain Go |
+| Lua (chaser example) | 13.7 µs, 52 allocations | most of it is building the observation table (about 240 entries) and entering the limit context; the script itself uses about 50 VM ticks of its 20,000 budget |
+| RL policy | 94 µs, 3 allocations | about 133,000 scalar float32 multiply-adds, no SIMD |
+
+A match with 4 RL bots and 4 baseline bots therefore spends about 0.4 ms of each 50 ms tick on bots.
+
+## RL result
+
+Training: PPO (Stable-Baselines3), 64 parallel duels against the baseline, MLP 256-256, config and curves in `trainer/runs/`. Evaluation: the exported ONNX policy, run by the Go server's own inference code, acting greedily, on 2,000 seeds that were never used in training.
+
+| Run | Change | Steps | Duel win rate vs baseline (n = 2,000) |
 |---|---|---|---|
-| `BenchmarkMovementSystem/n=16` | `pos += vel` over 16 entities (a full lobby) | 77.0 ns/op, **208 M entities/s** | 0 |
-| `BenchmarkMovementSystem/n=400` | the same over 400 entities (lobby plus projectiles) | 1.86 µs/op, **215 M entities/s** | 0 |
-| `BenchmarkMovementSystem/n=100000` | synthetic stress test | 488 µs/op, **205 M entities/s** | 0 |
-| `BenchmarkSpawnDespawn` | destroy 1 entity, create 1, attach 2 components, store size 400 | 997 ns/op | 0 |
-| `world.BenchmarkStep16` | one full `Sim.Step` with 16 combatants and random actions | 588 ns/op | 1 (128 B) |
+| ppo-v1 | raw observation vector | 8 M | 44.5% |
+| ppo-v2 | longer, learning rate decay | 30 M | 47.4% |
+| ppo-v3 | ray-cast features (D15) | 16 M | 47.9% |
+| ppo-v4 (shipped) | incoming-projectile field | 16 M | **48.5%** (baseline 50.5%) |
 
-How to read these numbers:
-- Throughput stays flat from 16 to 100k entities, so per-entity cost does not depend on store size. Each `Get` is one sparse-array lookup.
-- Spawn and despawn cost about 1 µs because each store is kept sorted by entity ID, which makes Set and Remove O(n). This is the price of deterministic iteration order. It stays cheap at game sizes and is noted as a `shortcut:` in `internal/ecs/store.go`.
-- A tick takes 0.6 µs, while the 20 Hz tick budget is 50 ms. The sim is nowhere near the bottleneck yet. Phase 7 will measure where the real limit is (rendering and SSH writes).
+The acceptance criterion "beats the scripted baseline" is **not met**. The policy reaches parity and stays there. With n = 2,000 the standard error is about 1.1 points, so 48.5% is not distinguishable from an even match, and it is not a win.
 
-## Still to measure
+Our reading (a hypothesis, not tested): the baseline's rule "line up, then shoot every 5 ticks" is close to the best simple strategy, and PPO converges to mirroring it. Beating it needs dodging on sight of an incoming shot, which pays off only several ticks later. A mirror duel between two baselines has no slot-order bias (44.3% vs 43.4% over 20,000 matches, `-per-slot`), so the environment itself is fair.
 
-These are filled in by later phases: concurrent matches and sessions, input-to-frame latency, diff vs full frame size, per-bot tick cost, RL win rate, determinism seeds in CI, sandbox attack cases, coverage.
+What would be tried next: self-play or a league instead of a fixed opponent, a recurrent policy, or a short imitation phase on the baseline before PPO.
 
-Current coverage (`go test -cover ./internal/...`): ecs 97.3%, world 93.7%.
+## Notes on the Phase 1 numbers
+
+Throughput of the ECS movement benchmark is flat from 16 to 100,000 entities. Spawn plus despawn costs about 1 µs at 400 entities because each store stays sorted by entity ID; that is the price of deterministic iteration order.

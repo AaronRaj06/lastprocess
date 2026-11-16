@@ -77,4 +77,4 @@ Short entries: context, choice, consequences.
 ## D15. RL input features: ray casts added to the vector
 - **Context:** With only the raw 15x15 view (as scaled cell codes) the PPO policy plateaued at 44.5% (8M steps) and 47.4% (30M steps) of 2,000 evaluation duels against the baseline.
 - **Choice:** `Observation.Vector` also emits, for each direction, the distance to the first wall and the closeness of the first enemy and projectile on that line. These are computed from the view, so the bot API and the information available are unchanged.
-- **Consequences:** See the RL section of `docs/benchmarks.md` for the result.
+- **Consequences:** 47.9% with rays, and 48.5% after also adding the `threats` field (incoming enemy projectiles, available to every bot kind). The policy reaches parity with the baseline but does not beat it; details and next steps are in the RL section of `docs/benchmarks.md`.

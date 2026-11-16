@@ -152,7 +152,6 @@ func main() {
 	stop := make(chan struct{})
 	var ready, done sync.WaitGroup
 	sem := make(chan struct{}, 64) // parallel SSH handshakes
-	start := time.Now()
 	for i := range *sessions {
 		ready.Add(1)
 		sem <- struct{}{}
@@ -163,8 +162,8 @@ func main() {
 		go func() { time.Sleep(20 * time.Millisecond); <-sem }()
 	}
 	ready.Wait()
-	fmt.Fprintf(os.Stderr, "%d sessions up in %.1fs (%d failed); settling 8s, then measuring %s\n",
-		*sessions, time.Since(start).Seconds(), res.failed.Load(), *duration)
+	fmt.Fprintf(os.Stderr, "%d sessions started (%d failed); settling 8s, then measuring %s\n",
+		*sessions, res.failed.Load(), *duration)
 	time.Sleep(8 * time.Second) // let lobbies fill and matches start
 	if _, err := stats("stats reset"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
