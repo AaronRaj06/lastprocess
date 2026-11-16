@@ -1,40 +1,32 @@
-// Command local runs a single-player match in the terminal for eyeballing the sim.
-// The fixed 20 Hz pacing lives here, not in the sim: world.Sim never reads the clock.
+// Command local runs a single-player match against bots in the terminal, with
+// no server. The fixed 20 Hz pacing lives here, not in the sim.
 package main
 
 import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
-	"github.com/AaronRaj06/lastprocess/internal/ecs"
+	"github.com/AaronRaj06/lastprocess/internal/match"
+	"github.com/AaronRaj06/lastprocess/internal/render"
 	"github.com/AaronRaj06/lastprocess/internal/world"
 )
 
 type tickMsg struct{}
 
 type model struct {
-	sim     *world.Sim
-	seed    uint64
-	player  ecs.Entity
-	pending world.Action // last key pressed this tick wins
+	game   *match.Game
+	player *match.Player
+	w, h   int
 }
 
-var (
-	playerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
-	wallStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-)
-
 var keyActions = map[string]world.Action{
-	"up": world.MoveN, "w": world.MoveN, "k": world.MoveN,
-	"right": world.MoveE, "d": world.MoveE, "l": world.MoveE,
-	"down": world.MoveS, "s": world.MoveS, "j": world.MoveS,
-	"left": world.MoveW, "a": world.MoveW, "h": world.MoveW,
+	"w": world.MoveN, "d": world.MoveE, "s": world.MoveS, "a": world.MoveW,
+	"W": world.DashN, "D": world.DashE, "S": world.DashS, "A": world.DashW,
+	"up": world.ShootN, "right": world.ShootE, "down": world.ShootS, "left": world.ShootW,
 }
 
 func tick() tea.Cmd {
@@ -45,54 +37,51 @@ func (m model) Init() tea.Cmd { return tick() }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.w, m.h = msg.Width, msg.Height
 	case tea.KeyMsg:
 		if s := msg.String(); s == "q" || s == "ctrl+c" || s == "esc" {
 			return m, tea.Quit
 		} else if a, ok := keyActions[s]; ok {
-			m.pending = a
+			m.player.Press(a)
 		}
 	case tickMsg:
-		m.sim.Step([]world.Input{{Combatant: m.player, Action: m.pending}})
-		m.pending = world.Stay
+		if !m.game.Sim.Done() {
+			m.game.Tick()
+		}
 		return m, tick()
 	}
 	return m, nil
 }
 
 func (m model) View() string {
-	v := m.sim.Snapshot()
-	at := map[int]world.CombatantView{}
-	var me world.CombatantView
-	for _, c := range v.Combatants {
-		at[c.Y*v.Map.W+c.X] = c
-		if c.ID == m.player {
-			me = c
-		}
+	if m.w == 0 {
+		return ""
 	}
-	var b strings.Builder
-	for y := range v.Map.H {
-		for x := range v.Map.W {
-			if c, ok := at[y*v.Map.W+x]; ok && c.ID == m.player {
-				b.WriteString(playerStyle.Render("@"))
-			} else if v.Map.At(x, y) == world.Wall {
-				b.WriteString(wallStyle.Render("#"))
-			} else {
-				b.WriteByte('.')
-			}
-		}
-		b.WriteByte('\n')
+	v := m.game.Sim.Snapshot()
+	help := "wasd move  arrows shoot  WASD dash  q quit"
+	if v.Done {
+		help = "match over - q to quit"
 	}
-	fmt.Fprintf(&b, "seed %d  tick %d  pos %d,%d  hp %d   move: arrows/wasd/hjkl  quit: q",
-		m.seed, v.Tick, me.X, me.Y, me.HP)
-	return b.String()
+	var f render.Frame
+	render.Draw(&f, &v, m.game.IDs[0], m.w, m.h, render.Status(&v, m.game.IDs[0]), help)
+	return render.Text(&f)
 }
 
 func main() {
-	seed := flag.Uint64("seed", uint64(time.Now().UnixNano()), "map seed")
+	seed := flag.Uint64("seed", uint64(time.Now().UnixNano()), "match seed")
+	bots := flag.String("bots", "baseline*7", "opponents, as for cmd/headless")
 	flag.Parse()
-	sim := world.New(world.Config{Seed: *seed})
-	m := model{sim: sim, seed: *seed, player: sim.Spawn()}
-	if _, err := tea.NewProgram(m, tea.WithAltScreen()).Run(); err != nil {
+	lineup, err := match.ParseLineup("baseline," + *bots)
+	if err == nil {
+		var g *match.Game
+		if g, err = match.NewGameFromLineup(*seed, lineup); err == nil {
+			p := &match.Player{Name: "you"}
+			g.Slots[0] = match.Slot{Name: "you", Kind: "human", Ctl: p}
+			_, err = tea.NewProgram(model{game: g, player: p}, tea.WithAltScreen()).Run()
+		}
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
