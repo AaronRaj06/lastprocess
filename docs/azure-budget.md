@@ -68,4 +68,4 @@ Run the VM only during placement and interview windows:
 
 | Date | Credit remaining | Note |
 |---|---|---|
-| 2026-11-18 | $100.00 (starting credit) | Resources created; not yet read from the portal |
+| 2026-11-18 | 9,523 of 9,523 (portal shows local currency, INR; equals the $100 grant) | Resources created about 2 h earlier; nothing charged yet. Track as a percentage: the 30% and under-$20 triggers are about ₹2,857 used and ₹1,905 remaining |
