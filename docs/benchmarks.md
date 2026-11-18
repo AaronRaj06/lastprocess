@@ -2,7 +2,7 @@
 
 Every number here was produced by a command in this repo on 2026-11-16. Rerun the command to reproduce it.
 
-**Hardware:** Apple M1 (8 cores), macOS (Darwin 27), Go 1.27.4. Server and load generator ran on the same machine, so the load numbers are conservative for the server and say nothing about a real network.
+**Hardware:** unless a row says otherwise, Apple M1 (8 cores), macOS (Darwin 27), Go 1.27.4. Server and load generator ran on the same machine, so the load numbers are conservative for the server and say nothing about a real network. The same benchmarks on the much smaller production VM are in [the next section](#production-vm-azure-standard_b2pts_v2).
 
 ## Summary table
 
@@ -28,6 +28,32 @@ Every number here was produced by a command in this repo on 2026-11-16. Rerun th
 | Go ONNX runner vs PyTorch | max logit difference 4.8e-06 over 16 vectors | `go test -v -run PolicyMatches ./internal/bot` |
 | Test coverage | ecs 97.3%, world 91.2%, sandbox 95.9%, render 98.5%, replay 94.4%, session 90.7%, match 89.7%, store 83.1%, bot 72.1% | `make cover` |
 | Docker image | 24.4 MB, static binary, non-root, read-only root filesystem | `make docker` |
+
+## Production VM: Azure Standard_B2pts_v2
+
+Measured 2026-11-18 on the live host: **Azure `Standard_B2pts_v2`, 2 vCPU Arm Neoverse-N1, 1 GiB RAM (944 MiB usable) + 2 GiB swap, East Asia, Ubuntu 24.04**, burstable B-series (sustained load spends CPU credits). Go 1.27.4 binaries cross-compiled with `GOOS=linux GOARCH=arm64` and run directly on the VM (test binaries via `go test -c`). Load tests ran the server and the load generator on the VM itself, so they share the 2 vCPUs.
+
+| Metric | VM value | M1 value | Command (run on the VM) |
+|---|---|---|---|
+| Max load at a stable 20 Hz | **800 sessions in 101 matches**, 0 failed, 6 of 40,422 ticks > 5 ms late | 1,600 sessions | `loadtest -addr 127.0.0.1:22 -sessions N -duration 20s` |
+| Input-to-frame latency, 100 to 400 sessions | **p50 25 to 27 ms, p99 51 ms** | p50 26, p99 50 ms | same |
+| Input-to-frame latency, 800 sessions | p50 32 ms, p99 118 ms | | same |
+| 1,200 sessions | **not stable**: 1,132 of 60,887 ticks late, max 400 ms; p99 803 ms | | same |
+| Server memory at 1,200 sessions | 236 MB RSS (container cap 512 MB); swap use 5 MB | | `ps -o rss= -C server` |
+| Idle memory, Docker installed, no server | 364 of 944 MiB used | | `free -m` |
+| Bytes per frame, full vs diff | 5,649 B vs 85 B (98.5% less) | 5,631 vs 84 B | `render.test -test.bench FrameBytes` |
+| Native baseline per decision | 13.0 ns | 8.8 ns | `bot.test -test.bench Act` |
+| RL policy per decision | 125 µs | 94 µs | `bot.test -test.bench Act` |
+| Lua bot per decision | 25.5 µs | 13.7 µs | `sandbox.test -test.bench LuaAct` |
+| ECS movement system | 153 to 165 M entities/s | 209 to 218 M | `ecs.test -test.bench Movement` |
+| Sim step, 16 combatants | 765 ns | 508 ns | `world.test -test.bench Step16` |
+| Headless, 8 baselines | 330 matches/s on 2 workers | 799 matches/s | `headless -matches 5000 -bots 'baseline*8'` |
+| RL vs baseline, same 2,000 seeds | RL 56.0%, baseline 42.4%, none 1.6%: **identical to the M1 result** | same | `headless -matches 2000 -seed 100000 -bots rl,baseline` |
+| Test suites (ecs, world, render, bot, sandbox, match) | all pass, including the 28 sandbox attack cases | | each `*.test` binary |
+
+Over the internet, with the load generator on a home connection in India and the server in Hong Kong: up to 400 sessions the server stayed at a stable 20 Hz (13 of 26,996 ticks late) and the VM was about 84% idle at 200 sessions (`vmstat 5`). Measured input-to-frame latency was p50 114 ms at 50 sessions and about 400 ms at 200 sessions. Since the VM was mostly idle, that growth comes from the client side (one home uplink and one laptop decoding hundreds of terminal streams), not the server. A single player's latency is the network round trip plus up to one 50 ms tick.
+
+Cross-architecture determinism: `internal/match/testdata/example.replay` was recorded on darwin/arm64 (8 bots including 2 RL and 2 Lua, 669 ticks). `TestGoldenReplayAcrossArch` re-simulates it **and re-runs every bot** on linux/amd64 in CI (GitHub Actions run 44318869007, passing), so the sim, the Lua VM and the RL float inference all produce bit-identical results on both architectures.
 
 ## Load test detail
 

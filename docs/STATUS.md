@@ -52,12 +52,19 @@ The failure: the "growth across ticks" attack **is contained** (the bot is disqu
 - **CPU on 1 vCPU (burstable B1s)**: B-series earn CPU credits at a baseline of about 10% of one vCPU; sustained load beyond that gets throttled. The load-test limit on the VM will be far below the M1 number.
 - **No remote**: the repo has no git remote, and `gh` and `az` are not installed on the dev machine, so CI has never run on GitHub and no secrets exist.
 
+## Update 2026-11-18 (after the audit)
+
+Done:
+- Sandbox attack test fixed to bound the slowest single call; `go test -race ./...` passes locally and in GitHub CI (run 44318869007, linux/amd64).
+- Deploy is host-neutral (four `DEPLOY_*` secrets, set), the image builds for amd64 and arm64, and D16 records the move from Oracle to Azure.
+- Azure VM `Standard_B2pts_v2` (Arm, 2 vCPU, 1 GiB) in East Asia. B1s is blocked in every region the subscription's policy allows; see `docs/azure-budget.md`. sshd is on 2200 only, Docker and 2 GiB swap are installed, and a reboot was tested.
+- VM benchmarks are in `docs/benchmarks.md`: stable to 800 sessions, and all suites pass on the VM.
+- Cross-architecture determinism: a committed replay recorded on arm64 reproduces on amd64 in CI, bots included.
+- Budget doc, cost-check, stop, start and backup scripts, `docs/FALLBACK.md`, `make demo`, and README live-host and maintainer notes.
+
 ## What remains
 
-1. Fix the sandbox timing test so `go test -race ./...` is green.
-2. Host-neutral deploy (secrets for host/user/port, multi-arch image, generic docs), and record D16 (Oracle to Azure).
-3. Push to GitHub; confirm CI is green there.
-4. Provision the Azure VM (with approval), prepare it, set secrets, first deploy.
-5. Benchmarks on the B1s VM (load test, memory, tick cost), labelled by machine.
-6. Cross-architecture replay check (commit an example replay recorded on one arch, verify on the other in CI).
-7. Budget doc and scripts (`azure-cost-check`, `azure-stop`, `azure-start`, `backup`), `docs/FALLBACK.md`, `make demo`, README updates (live address, on-demand note, local-run command).
+1. Point `lastprocess-arena.duckdns.org` at `20.205.110.50` (owner, DuckDNS web UI).
+2. First deploy: tag `v0.1.0` (needs approval), make the GHCR package public, and test `ssh` from another network.
+3. Run `scripts/backup.sh`, `scripts/azure-stop.sh` and `scripts/azure-start.sh` once against the live deploy.
+4. Log the first credit reading from the portal.

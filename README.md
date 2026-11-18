@@ -1,12 +1,13 @@
 ```
-ssh play.<your-domain>
+ssh lastprocess-arena.duckdns.org
 ```
 
 # Last Process Standing
 
 A multiplayer, real-time battle royale that runs in your terminal over SSH. No install, no sign-up: 8 processes spawn on a generated ASCII map, the safe zone shrinks, the last one alive wins. Empty slots are filled by bots, so a match is always running.
 
-> **Status:** everything below runs and is tested locally and in Docker. The public server is not deployed yet (it needs a cloud account and a domain; steps are in [`deploy/README.md`](deploy/README.md)). Until then: `make run`, then `ssh -p 2222 localhost`.
+> **Live server:** `ssh lastprocess-arena.duckdns.org` is a **temporary demo host** (a small Azure for Students VM, run on demand during demo windows). If it does not answer, the whole game runs locally in one command, at no cost:
+> `make demo` (or `docker run --rm -p 2222:2222 ghcr.io/aaronraj06/lastprocess:latest`), then `ssh -p 2222 localhost`. See [`docs/FALLBACK.md`](docs/FALLBACK.md) for recorded evidence and other options.
 
 ![demo](docs/demo.gif)
 
@@ -51,7 +52,7 @@ More in [`docs/architecture.md`](docs/architecture.md).
 
 ## Measured
 
-Apple M1, server and load generator on the same machine. Full table with commands: [`docs/benchmarks.md`](docs/benchmarks.md).
+Apple M1, server and load generator on the same machine. On the production VM (2 Arm vCPU, 1 GiB) the stable limit is 800 sessions in 101 matches, with p50 26 ms and p99 51 ms up to 400 sessions. Full tables with commands and hardware: [`docs/benchmarks.md`](docs/benchmarks.md).
 
 | | |
 |---|---|
@@ -61,7 +62,7 @@ Apple M1, server and load generator on the same machine. Full table with command
 | Bot cost per decision | native 8.8 ns, Lua sandbox 13.7 µs, RL policy 94 µs |
 | ECS movement system | about 210 M entities/s, 0 allocations |
 | Headless sim | 0.75 M ticks/s on 8 cores (4,690x real time per core) |
-| Determinism | 50 full matches hashed every tick and replayed bit-identically, in CI |
+| Determinism | 50 full matches hashed every tick and replayed bit-identically, in CI; a replay recorded on arm64 reproduces bit-identically on amd64, bots included |
 | Sandbox | 28 attack scripts contained, 27 dangerous globals unreachable |
 | Scripted baseline vs random bot | wins 80.3% of 5,000 duels |
 | RL bot vs scripted baseline | wins 56.0% of 2,000 duels (baseline 42.4%, rest no survivor) |
@@ -113,4 +114,11 @@ make lint      # go vet + golangci-lint
 make bench     # benchmarks
 make pytest    # trainer tests (needs uv)
 make docker    # 24 MB static image
+make demo      # local server with bots, then: ssh -p 2222 localhost
 ```
+
+### Maintainers
+
+- Deploy: push a `v*` tag; see [`deploy/README.md`](deploy/README.md). Back up first with `scripts/backup.sh`.
+- **Weekly:** read the Azure credit in the portal (Education → Overview), run `scripts/azure-cost-check.sh`, and log both in [`docs/azure-budget.md`](docs/azure-budget.md). Follow its trigger rules.
+- Between demo windows: `scripts/azure-stop.sh`; before one: `scripts/azure-start.sh`.
