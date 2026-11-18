@@ -55,17 +55,27 @@ func TestAttacksContained(t *testing.T) {
 	runtime.ReadMemStats(&before)
 	for _, a := range attacks {
 		t.Run(a.name, func(t *testing.T) {
-			start := time.Now()
-			b, err := New(a.src, 1)
+			// Limit the slowest single call, not the whole case: "growth across ticks"
+			// is many cheap ticks by design, and -race makes each one several times slower.
+			var slowest time.Duration
+			timed := func(f func()) {
+				start := time.Now()
+				f()
+				slowest = max(slowest, time.Since(start))
+			}
+			var b *Bot
+			var err error
+			timed(func() { b, err = New(a.src, 1) })
 			if (err != nil) != (a.name == "infinite loop at load") {
 				t.Fatalf("load: %v", err)
 			}
 			if err == nil {
 				for i := range 30 {
-					act := b.Act(liveObs())
+					var act world.Action
+					timed(func() { act = b.Act(liveObs()) })
 					if a.name == "growth across ticks" {
 						for !b.Disqualified && i == 29 {
-							b.Act(liveObs())
+							timed(func() { b.Act(liveObs()) })
 						}
 						continue
 					}
@@ -80,8 +90,8 @@ func TestAttacksContained(t *testing.T) {
 			} else {
 				t.Logf("rejected at load: %v", err)
 			}
-			if d := time.Since(start); d > 5*time.Second {
-				t.Fatalf("took %v", d)
+			if slowest > time.Second {
+				t.Fatalf("one call took %v", slowest)
 			}
 		})
 	}

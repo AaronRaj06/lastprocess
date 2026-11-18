@@ -2,7 +2,7 @@
 
 Short entries: context, choice, consequences.
 
-## D1. Host on Oracle Cloud Always Free, not Fly.io
+## D1. Host on Oracle Cloud Always Free, not Fly.io (superseded by D16)
 - **Context:** The project must cost nothing. As far as we know, Fly.io dropped its free allowance for new accounts in 2024, and SSH on port 22 needs a paid dedicated IPv4 address. Phase 8 will check this again.
 - **Choice:** Oracle Cloud Always Free VM, reached through a free dynamic-DNS subdomain until a real domain exists.
 - **Consequences:** We run our own VM (Docker, systemd), with no platform-managed deploys. CI/CD deploys over SSH.
@@ -78,3 +78,9 @@ Short entries: context, choice, consequences.
 - **Context:** With only the raw 15x15 view (as scaled cell codes) the PPO policy plateaued at 44.5% (8M steps) and 47.4% (30M steps) of 2,000 evaluation duels against the baseline.
 - **Choice:** `Observation.Vector` also emits, for each direction, the distance to the first wall and the closeness of the first enemy and projectile on that line. These are computed from the view, so the bot API and the information available are unchanged.
 - **Consequences:** 47.9% with rays, and 48.5% after also adding the `threats` field (incoming enemy projectiles, available to every bot kind). From scratch the policy reaches parity with the baseline but does not beat it. An imitation warm start on the baseline followed by PPO (ppo-v5) does: 56.0% against 42.4%. The env server gained an `X` op that returns the baseline's action for the learner's current observation, used only for those labels. Details are in the RL section of `docs/benchmarks.md`.
+
+## D16. Host on Azure for Students, not Oracle Cloud
+- **Context:** Oracle Cloud signup rejected the only available card (an Indian debit card; Oracle accepts credit cards only, no prepaid or virtual cards), and most free tiers need a card. Azure for Students needs none: the subscription has $100 of credit until 2027-11-18 and no payment method, so it cannot bill anyone; when the credit runs out, resources stop.
+- **Options:** Oracle with another card (refused); Fly.io (no free allowance, port 22 needs a paid IPv4); a home server (CGNAT, see `docs/FALLBACK.md`); Azure for Students.
+- **Choice:** Azure for Students, provisioned with the Azure CLI: one VM from the student free-service sizes, a 30 GB Standard SSD OS disk (instead of the default Premium SSD, about $2.64 against $5.28 a month), one public IP, one network security group. Image built in CI for amd64 and arm64.
+- **Consequences:** The live server is a temporary demo host tied to a college account; it may vanish at graduation or when the credit ends. The public IP and disk cost credit even when the VM is deallocated. Spend is tracked in `docs/azure-budget.md` with trigger rules for an on-demand "demo window" mode. The deploy workflow has no Azure-specific step, so moving hosts changes only secrets.

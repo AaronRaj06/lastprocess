@@ -1,4 +1,4 @@
-# Runs on the Oracle Cloud Always Free VM. Port 22 on the host goes to the game;
+# Runs on any small Linux VM with Docker. Port 22 on the host goes to the game;
 # move the VM's own sshd to another port first (see deploy/README.md).
 services:
   game:

@@ -1,11 +1,13 @@
 # Build: docker build -f deploy/Dockerfile -t lastprocess .
-FROM golang:1.27 AS build
+# Cross-compiles on the CI runner's own architecture, so a multi-arch build needs no emulation.
+FROM --platform=$BUILDPLATFORM golang:1.27 AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 # No cgo anywhere (pure-Go SQLite, Lua VM and ONNX runner), so the binary is static.
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /server ./cmd/server && mkdir /data
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /server ./cmd/server && mkdir /data
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /server /server
