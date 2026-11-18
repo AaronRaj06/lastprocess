@@ -1,4 +1,4 @@
-.PHONY: test race lint bench cover run run-local headless train eval pytest loadtest docker
+.PHONY: demo test race lint bench cover run run-local headless train eval pytest loadtest docker
 
 test:
 	go test ./...
@@ -18,6 +18,9 @@ cover:
 
 run:
 	go run ./cmd/server -fill rl,baseline
+
+# Zero-cost local demo: bots fill every match; connect with ssh -p 2222 localhost.
+demo: run
 
 run-local:
 	go run ./cmd/local
