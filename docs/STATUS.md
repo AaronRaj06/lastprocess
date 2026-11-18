@@ -62,9 +62,13 @@ Done:
 - Cross-architecture determinism: a committed replay recorded on arm64 reproduces on amd64 in CI, bots included.
 - Budget doc, cost-check, stop, start and backup scripts, `docs/FALLBACK.md`, `make demo`, and README live-host and maintainer notes.
 
+## First deploy (2026-11-18)
+
+- `v0.1.0` was tagged. Deploy run 44345538888 first failed with `unauthorized`, because the GHCR package was still private. After the owner made the package public, a rerun of the same run passed: the image was pulled, the volume created, and the container started.
+- `ssh lastprocess-arena.duckdns.org` was tested from a home connection in India over the public internet. `help` and `stats` answer, and a play session in an 80x43 pseudo-terminal receives about 22.6 kB of frames in 10 s, with RL and baseline bots in the match.
+- `scripts/backup.sh`, `scripts/azure-stop.sh` and `scripts/azure-start.sh` were each run once. After the deallocate and start: same IP, the game restarted by itself, and the SSH host key was unchanged. The backup now stops the game for the copy, so the SQLite file and its WAL are consistent, and it never leaves a partial file.
+
 ## What remains
 
-1. Point `lastprocess-arena.duckdns.org` at `20.205.110.50` (owner, DuckDNS web UI).
-2. First deploy: tag `v0.1.0` (needs approval), make the GHCR package public, and test `ssh` from another network.
-3. Run `scripts/backup.sh`, `scripts/azure-stop.sh` and `scripts/azure-start.sh` once against the live deploy.
-4. Log the first credit reading from the portal.
+- Not yet tested from a second, independent network (for example a phone hotspot). Only the home connection has been tested.
+- Weekly: read the credit in the portal and log it in `docs/azure-budget.md`.
