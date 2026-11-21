@@ -2,7 +2,7 @@
 
 > Historical log, oldest first. The final state of the project is in [`PROJECT_REPORT.md`](PROJECT_REPORT.md); the red `-race` result below was fixed the same day (see "Update 2026-11-18").
 
-Audit of the repo against the original project spec, on 2026-11-18 at commit `8126637`, on an Apple M1 (macOS, Go 1.27.4). Commands were run for this audit unless marked "from benchmarks.md" (measured 2026-11-16, same machine).
+Audit of the repo against the original project spec, on 2026-11-18 at commit `7f520d2`, on an Apple M1 (macOS, Go 1.27.4). Commands were run for this audit unless marked "from benchmarks.md" (measured 2026-11-16, same machine).
 
 ## Checks run today
 

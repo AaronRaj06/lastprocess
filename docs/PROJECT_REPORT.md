@@ -1,6 +1,6 @@
 # Last Process Standing: project report
 
-What was built, mapped against the original project spec. Written 2026-11-19 at commit `904e122` (tag `v0.1.0` is live). Every number here comes from `docs/benchmarks.md`, which records the command that produced it.
+What was built, mapped against the original project spec. Written 2026-11-19 at commit `7f3913f` (tag `v0.1.0` is live). Every number here comes from `docs/benchmarks.md`, which records the command that produced it.
 
 ```
 ssh lastprocess-arena.duckdns.org
