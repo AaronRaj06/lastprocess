@@ -1,0 +1,16 @@
+name: live-check
+# Connects to the public server from GitHub's network, independent of the dev machine.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+jobs:
+  ssh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guest SSH session answers stats
+        run: |
+          out=$(ssh -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new \
+            -o PubkeyAuthentication=no lastprocess-arena.duckdns.org stats)
+          echo "$out"
+          echo "$out" | grep -q '"Matches":[1-9]'

@@ -14,3 +14,4 @@ __pycache__/
 trainer/runs/*/model.zip
 trainer/runs/smoke/
 backups/
+CLAUDE_CODE_PROMPT.md

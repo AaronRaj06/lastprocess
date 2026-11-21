@@ -23,7 +23,7 @@ ssh -p 2222 localhost
 
 ## 3. On-demand home server
 
-Run the same image on a laptop (option 1), then give it a public address. Many Indian home ISPs put customers behind CGNAT, so plain port forwarding often fails. Check first: if the WAN address on the router differs from the one `curl ifconfig.me` shows, you are behind CGNAT.
+Run the same image on a laptop (option 1), then give it a public address. Many home ISPs put customers behind CGNAT, so plain port forwarding often fails. Check first: if the WAN address on the router differs from the one `curl ifconfig.me` shows, you are behind CGNAT.
 
 | Option | Works behind CGNAT | Notes |
 |---|---|---|

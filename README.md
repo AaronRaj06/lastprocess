@@ -4,6 +4,8 @@ ssh lastprocess-arena.duckdns.org
 
 # Last Process Standing
 
+[![ci](https://github.com/AaronRaj06/lastprocess/actions/workflows/ci.yml/badge.svg)](https://github.com/AaronRaj06/lastprocess/actions/workflows/ci.yml) [![live-check](https://github.com/AaronRaj06/lastprocess/actions/workflows/live-check.yml/badge.svg)](https://github.com/AaronRaj06/lastprocess/actions/workflows/live-check.yml) [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A multiplayer, real-time battle royale that runs in your terminal over SSH. No install, no sign-up: 8 processes spawn on a generated ASCII map, the safe zone shrinks, the last one alive wins. Empty slots are filled by bots, so a match is always running.
 
 > **Live server:** `ssh lastprocess-arena.duckdns.org` is a **temporary demo host** (a small Azure for Students VM, run on demand during demo windows). If it does not answer, the whole game runs locally in one command, at no cost:
@@ -31,7 +33,7 @@ ssh -p 2222 localhost leaderboard
 
 Other entry points: `make run-local` (single player, no server), `make headless` (thousands of bot matches), `make train` (PPO), `make loadtest`.
 
-Writing a bot: [`docs/bot-api.md`](docs/bot-api.md).
+Writing a bot: [`docs/bot-api.md`](docs/bot-api.md). What was built against the plan, with every number and known weakness: [`docs/PROJECT_REPORT.md`](docs/PROJECT_REPORT.md).
 
 ## Architecture
 

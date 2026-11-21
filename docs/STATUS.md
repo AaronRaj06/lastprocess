@@ -1,6 +1,8 @@
 # Status audit
 
-Audit of the repo against `CLAUDE_CODE_PROMPT.md` (the original brief), on 2026-11-18 at commit `8126637`, on an Apple M1 (macOS, Go 1.27.4). Commands were run for this audit unless marked "from benchmarks.md" (measured 2026-11-16, same machine).
+> Historical log, oldest first. The final state of the project is in [`PROJECT_REPORT.md`](PROJECT_REPORT.md); the red `-race` result below was fixed the same day (see "Update 2026-11-18").
+
+Audit of the repo against the original project spec, on 2026-11-18 at commit `8126637`, on an Apple M1 (macOS, Go 1.27.4). Commands were run for this audit unless marked "from benchmarks.md" (measured 2026-11-16, same machine).
 
 ## Checks run today
 
@@ -65,7 +67,7 @@ Done:
 ## First deploy (2026-11-18)
 
 - `v0.1.0` was tagged. Deploy run 44345538888 first failed with `unauthorized`, because the GHCR package was still private. After the owner made the package public, a rerun of the same run passed: the image was pulled, the volume created, and the container started.
-- `ssh lastprocess-arena.duckdns.org` was tested from a home connection in India over the public internet. `help` and `stats` answer, and a play session in an 80x43 pseudo-terminal receives about 22.6 kB of frames in 10 s, with RL and baseline bots in the match.
+- `ssh lastprocess-arena.duckdns.org` was tested from a residential connection over the public internet. `help` and `stats` answer, and a play session in an 80x43 pseudo-terminal receives about 22.6 kB of frames in 10 s, with RL and baseline bots in the match.
 - `scripts/backup.sh`, `scripts/azure-stop.sh` and `scripts/azure-start.sh` were each run once. After the deallocate and start: same IP, the game restarted by itself, and the SSH host key was unchanged. The backup now stops the game for the copy, so the SQLite file and its WAL are consistent, and it never leaves a partial file.
 
 ## What remains
