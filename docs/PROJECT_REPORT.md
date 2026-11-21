@@ -14,7 +14,7 @@ ssh lastprocess-arena.duckdns.org
 | Status | All 8 phases done. Public server live on Azure since 2026-11-18. |
 | Code | About 5,550 lines of Go (including tests) and 335 lines of Python (trainer). 19 commits, 2026-11-16 to 2026-11-18. |
 | CI | GitHub Actions: `go vet`, `go test -race`, `golangci-lint`, `pytest`. Tagging `v*` builds an amd64 + arm64 image, pushes it to GHCR and restarts the server. |
-| Open items | Not yet tested from a second, independent network. Azure credit to be logged weekly (section 7). |
+| Open items | None in the build. Ongoing: a daily `live-check` workflow SSHes in from GitHub's network, and the Azure credit is logged weekly (section 7). |
 
 ## 2. Definition of done (brief section 12)
 
@@ -155,7 +155,7 @@ Nothing on the brief's "never cut" list (determinism tests, benchmarks, public d
 | Backup | `scripts/backup.sh`: briefly stops the game so SQLite is consistent, and never leaves a partial file. |
 | Budget triggers | Over 30% used in the first month, or under $20 left: switch to demo-window mode. Details in `docs/azure-budget.md`. |
 
-Still to do: one test from a second network (for example a phone hotspot), and the weekly credit log, including a check that compute is not being charged (about $6.50 a month expected, about $15 if it is).
+Ongoing: the daily `live-check` workflow (reachability from an independent network), and the weekly credit log, including a check that compute is not being charged (about $6.50 a month expected, about $15 if it is).
 
 ## 8. Where to look
 

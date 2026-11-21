@@ -72,5 +72,5 @@ Done:
 
 ## What remains
 
-- Not yet tested from a second, independent network (for example a phone hotspot). Only the home connection has been tested.
+- ~~Second, independent network~~: closed 2026-11-21. `.github/workflows/live-check.yml` connects daily from GitHub's network and checks that a match is running (first run 44917473805, passing, right after a redeploy).
 - Weekly: read the credit in the portal and log it in `docs/azure-budget.md`.
